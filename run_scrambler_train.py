@@ -19,7 +19,7 @@ def main():
 
     x_train, y_train = load_pro_posdata(pos_data_path)
 
-    predictor = load_pro_predictor("adnppro_trained_model/{}.h5".format(load_name))
+    predictor = load_pro_predictor("adnppro_trained_model/{}.h5".format(load_name), training=False)
 
     pseudo_count = 1.0
     encoder = OneHotEncoder(seq_length=1000, channel_map={'A' : 0, 'C' : 1, 'G' : 2, 'T' : 3})

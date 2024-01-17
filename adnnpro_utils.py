@@ -113,14 +113,17 @@ def _conv_block(ip, nb_filter, dropout_rate=None):
     return x
 
 
-def _transition_block(ip, nb_filter, dropout_rate=None):
+def _transition_block(ip, nb_filter, dropout_rate=None, training=True):
     concat_axis = 1 if K.image_dim_ordering() == "th" else -1
     nb_filter = int(nb_filter / 2)
     x = Convolution2D(filters=nb_filter, kernel_size=(1, 1), kernel_initializer="he_uniform", padding="same", use_bias=False)(ip)
     if dropout_rate:
         x = Dropout(dropout_rate)(x)
     x = AveragePooling2D((2, 2), strides=(2, 2))(x)
-    x = BatchNormalization(mode=0, axis=concat_axis)(x)
+    if training:
+        x = BatchNormalization(mode=0, axis=concat_axis)(x)
+    else:
+        x = BatchNormalization(mode=0, axis=concat_axis)(x, training=False)
     return x, nb_filter
 
 
@@ -194,7 +197,7 @@ def _cbam_block(cbam_feature, ratio=8):
     return cbam_feature
 
 
-def _create_dense_net(dim, depth=40, nb_dense_block=3, growth_rate=12, nb_filter=64, dropout_rate=None, verbose=True, linear=False):
+def _create_dense_net(dim, depth=40, nb_dense_block=3, growth_rate=12, nb_filter=64, dropout_rate=None, verbose=True, linear=False, training=True):
     model_input = Input(shape=dim)
     concat_axis = 1 if K.image_dim_ordering() == "th" else -1
     nb_layers = int((depth - 4) / 3)
@@ -205,14 +208,20 @@ def _create_dense_net(dim, depth=40, nb_dense_block=3, growth_rate=12, nb_filter
         x = _cbam_block(x)
         x, nb_filter = _dense_block(x, nb_layers, nb_filter, growth_rate, dropout_rate=dropout_rate)
         x = _cbam_block(x)
-        x, nb_filter = _transition_block(x, nb_filter, dropout_rate=dropout_rate)
+        if training:
+            x, nb_filter = _transition_block(x, nb_filter, dropout_rate=dropout_rate)
+        else:
+            x, nb_filter = _transition_block(x, nb_filter, dropout_rate=dropout_rate, training=False)
     x = _cbam_block(x)
     x, nb_filter = _dense_block(x, nb_layers, nb_filter, growth_rate, dropout_rate=dropout_rate)
     x = _cbam_block(x)
     x = AveragePooling2D((25, 1), strides=(25, 1))(x)
     x = Flatten()(x)
     x = Dense(64, activation='relu')(x)
-    x = BatchNormalization(mode=0, axis=concat_axis, name='outs')(x)
+    if training:
+        x = BatchNormalization(mode=0, axis=concat_axis, name='outs')(x)
+    else:
+        x = BatchNormalization(mode=0, axis=concat_axis, name='outs')(x, training=False)
     if linear:
         x = Dense(1, activation='linear')(x)
     else:
@@ -225,9 +234,9 @@ def _create_dense_net(dim, depth=40, nb_dense_block=3, growth_rate=12, nb_filter
     return densenet
 
 
-def load_pro_predictor(keras_model_weights="adnppro_trained_model/CCMP525.h5", linear=False):
+def load_pro_predictor(keras_model_weights="adnppro_trained_model/CCMP525.h5", linear=False, training=True):
 
-    predictor = _create_dense_net((1, 1000, 4), depth=34, nb_dense_block=3, growth_rate=12, nb_filter=64, dropout_rate=0.5, verbose=True, linear=linear)
+    predictor = _create_dense_net((1, 1000, 4), depth=34, nb_dense_block=3, growth_rate=12, nb_filter=64, dropout_rate=0.5, verbose=True, linear=linear, training=training)
     predictor.load_weights(keras_model_weights)
     predictor.compile(loss='binary_crossentropy', optimizer=optimizers.adam(lr=0.001), metrics=['accuracy'])
 
